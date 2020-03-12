@@ -1,9 +1,11 @@
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 import numpy as np
+from torch.utils.data import SubsetRandomSampler
 
 from PIL import ImageFilter
 from PIL import Image
+import torch
 
 
 def cifar_strong_transforms():
@@ -70,10 +72,12 @@ class Loader(object):
         }
 
         # Get the datasets
-        train_dataset, test_dataset = self.get_dataset(loader_map[dataset_ident], file_path, download,
-                                                       train_transform, test_transform, target_transform)
+        train_dataset, test_dataset, labeled_ind, unlabeled_ind = self.get_dataset(loader_map[dataset_ident], file_path, download,
+                                                                                   train_transform, test_transform, target_transform)
         # Set the loaders
-        self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, **kwargs)
+        self.train_inlier = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, sampler=SubsetRandomSampler(labeled_ind), **kwargs)
+        self.test_inlier = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, sampler=SubsetRandomSampler(unlabeled_ind), **kwargs)
+
         self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, **kwargs)
 
         tmp_batch = self.train_loader.__iter__().__next__()[0]
@@ -92,4 +96,13 @@ class Loader(object):
                                transform=test_transform,
                                target_transform=target_transform)
 
-        return train_dataset, test_dataset
+        if isinstance(train_dataset.targets, torch.Tensor):
+            train_labels = train_dataset.targets.numpy()
+        else:
+            train_labels = np.array(train_dataset.targets)
+
+        labeled_ind, unlabeled_ind = [], []
+        for cl in range(10):
+            labeled_ind.extend(np.where(train_labels == cl)[0].tolist())
+
+        return train_dataset, test_dataset, labeled_ind, unlabeled_ind
