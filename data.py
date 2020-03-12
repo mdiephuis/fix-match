@@ -37,8 +37,10 @@ def cifar_test_transforms():
 
 
 class CIFAR10C(datasets.CIFAR10):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, weak_transform, strong_transform, *args, **kwargs):
         super(CIFAR10C, self).__init__(*args, **kwargs)
+        self.weak_transform = weak_transform
+        self.strong_transform = strong_transforms
 
     def __getitem__(self, index):
         img, target = self.data[index], self.targets[index]
@@ -46,34 +48,33 @@ class CIFAR10C(datasets.CIFAR10):
         # return a PIL Image
         img = Image.fromarray(img)
 
-        if self.transform is not None:
-            xi = self.transform(img)
-            xj = self.transform(img)
+        xi = self.weak_transform(img)
+        xj = self.strong_transform(img)
 
         if self.target_transform is not None:
             target = self.target_transform(target)
 
+        # Return label just for debugging
         return xi, xj, target
 
 
 class Loader(object):
+        # TODO Parameters
     def __init__(self, dataset_ident, file_path, download, batch_size, train_transform, test_transform, target_transform, use_cuda):
 
         kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
-        loader_map = {
-            'CIFAR10C': CIFAR10C,
-            'CIFAR10': datasets.CIFAR10
-        }
+        weak_transform = cifar_weak_transforms()
+        strong_transform = cifar_strong_transforms()
 
-        num_class = {
-            'CIFAR10C': 10,
-            'CIFAR10': 10
-        }
+        nolabel_train_dataset = CIFAR10C(weak_transform=weak_transform, strong_transform=strong_transform, file_path,
+                                         train=True, download=download,
+                                         transform=None,
+                                         target_transform=None)
 
-        # Get the datasets
-        train_dataset, test_dataset, labeled_ind, unlabeled_ind = self.get_dataset(loader_map[dataset_ident], file_path, download,
-                                                                                   train_transform, test_transform, target_transform)
+        # Get labeled training data
+        train_dataset, test_dataset, labeled_ind, unlabeled_ind = self.get_labelled_dataset('CIFAR10', file_path, download,
+                                                                                            train_transform, test_transform, target_transform)
         # Set the loaders
         self.train_inlier = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, sampler=SubsetRandomSampler(labeled_ind), **kwargs)
         self.test_inlier = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, sampler=SubsetRandomSampler(unlabeled_ind), **kwargs)
@@ -85,7 +86,7 @@ class Loader(object):
         self.num_class = num_class[dataset_ident]
 
     @staticmethod
-    def get_dataset(dataset, file_path, download, train_transform, test_transform, target_transform):
+    def get_labelled_dataset(dataset, file_path, download, train_transform, test_transform, target_transform):
 
         # Training and Validation datasets
         train_dataset = dataset(file_path, train=True, download=download,
