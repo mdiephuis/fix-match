@@ -25,6 +25,8 @@ parser.add_argument('--data-dir', type=str, default='data',
                     help='Path to dataset (default: data')
 parser.add_argument('--feature-size', type=int, default=128,
                     help='Feature output size (default: 128')
+parser.add_argument('--num-labeled', type=int, default=100,
+                    help='labeled data per class (default: 100')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input training batch-size')
 parser.add_argument('--accumulation-steps', type=int, default=4, metavar='N',
@@ -70,53 +72,49 @@ if use_tb:
     logger = SummaryWriter(comment='_' + args.uid + '_' + args.dataset_name)
 
 
-# TODO: setup augmentation
-if args.dataset_name == 'CIFAR10C':
-    in_channels = 3
-    # Get train and test loaders for dataset
-    train_transforms = cifar_train_transforms()
-    test_transforms = cifar_test_transforms()
-    target_transforms = None
-
-    loader = Loader(args.dataset_name, args.data_dir, True, args.batch_size, train_transforms, test_transforms, target_transforms, use_cuda)
-    train_loader = loader.train_loader
-    test_loader = loader.test_loader
+loader = LoaderCIFAR(args.data_dir, True, args.batch_size, args.num_labeled, use_cuda)
 
 
 # train validate
-def train_validate(model, loader, optimizer, is_train, epoch, use_cuda):
+def train(model, loader, optimizer, epoch, use_cuda):
 
     # TODO TWO LOSS FUNCTIONS
-    loss_func =
+    loss_func = None
 
-    data_loader = loader.train_loader if is_train else loader.test_loader
+    data_loader = zip(loader.train_labeled, loader.train_unlabeled)
 
-    if is_train:
-        model.train()
-        model.zero_grad()
-    else:
-        model.eval()
+    model.train()
+    model.zero_grad()
 
-    desc = 'Train' if is_train else 'Validation'
+    desc = 'Train'
 
     total_loss = 0.0
 
     tqdm_bar = tqdm(data_loader)
-    for i, (x_i, x_j, _) in enumerate(tqdm_bar):
+    for batch_idx, (data_s, data_u) in enumerate(data_loader):
 
-        x_i = x_i.cuda() if use_cuda else x_i
-        x_j = x_j.cuda() if use_cuda else x_j
+        # labeled data
+        x_i_s, y_s = data_s
 
-        _, z_i = model(x_i)
-        _, z_j = model(x_j)
+        # unlabled_data
+        x_i_u, x_j_u, _ = data_u
 
+        # to cuda()
+        x_i_s = x_i_s.cuda() if use_cuda else x_i_s
+        x_i_u = x_i_u.cuda() if use_cuda else x_i_u
+        x_j_u = x_j_u.cuda() if use_cuda else x_j_u
+
+        y_s = y_s.cuda() if use_cuda else y_s
+
+        # model forward
+
+        # loss function
         loss = loss_func(z_i, z_j)
         loss /= args.accumulation_steps
 
-        if is_train:
-            loss.backward()
+        loss.backward()
 
-        if (i + 1) % args.accumulation_steps == 0 and is_train:
+        if (i + 1) % args.accumulation_steps == 0:
             optimizer.step()
             model.zero_grad()
 
@@ -128,14 +126,14 @@ def train_validate(model, loader, optimizer, is_train, epoch, use_cuda):
 
 
 def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
-    t_loss = train_validate(model, loader, optimizer, True, epoch, use_cuda)
-    v_loss = train_validate(model, loader, optimizer, False, epoch, use_cuda)
+    t_loss = train(model, loader, optimizer, epoch, use_cuda)
+    # v_loss = validate(model, loader, optimizer, False, epoch, use_cuda)
 
     schedular.step(v_loss)
 
     if use_tb:
         logger.add_scalar(log_dir + '/train-loss', t_loss, epoch)
-        logger.add_scalar(log_dir + '/valid-loss', v_loss, epoch)
+        # logger.add_scalar(log_dir + '/valid-loss', v_loss, epoch)
 
     # print('Epoch: {} Train loss {}'.format(epoch, t_loss))
     # print('Epoch: {} Valid loss {}'.format(epoch, v_loss))
