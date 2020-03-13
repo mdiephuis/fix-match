@@ -61,12 +61,12 @@ class CIFAR10C(CIFAR10):
 
 
 class LoaderCIFAR(object):
-    def __init__(self, file_path, download, batch_size, use_cuda):
+    def __init__(self, file_path, download, batch_size, num_labeled, use_cuda):
 
         kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
         # Get the datasets
-        train_labeled_dataset, train_unlabeled_dataset, test_dataset, labeled_ind, unlabeled_ind = self.get_dataset(file_path, download)
+        train_labeled_dataset, train_unlabeled_dataset, test_dataset, labeled_ind, unlabeled_ind = self.get_dataset(file_path, download, num_labeled)
         # Set the loaders
         self.train_labeled = DataLoader(train_labeled_dataset, batch_size=batch_size, shuffle=False, sampler=SubsetRandomSampler(labeled_ind), **kwargs)
         self.train_unlabeled = DataLoader(train_unlabeled_dataset, batch_size=batch_size, shuffle=False, sampler=SubsetRandomSampler(unlabeled_ind), **kwargs)
@@ -77,9 +77,9 @@ class LoaderCIFAR(object):
         self.img_shape = list(tmp_batch.size())[1:]
 
     @staticmethod
-    def get_dataset(file_path, download):
+    def get_dataset(file_path, download, num_labeled):
 
-        num_sample = 10
+        num_labeled = 10
 
         # transforms
         weak_transform = cifar_weak_transforms()
@@ -108,7 +108,7 @@ class LoaderCIFAR(object):
 
         for cl in range(10):
             class_indices = np.random.permutation(np.where(train_labels == cl)[0]).tolist()
-            labeled_ind.extend(class_indices[:num_sample])
-            unlabeled_ind.extend(class_indices[num_sample:])
+            labeled_ind.extend(class_indices[:num_labeled])
+            unlabeled_ind.extend(class_indices[num_labeled:])
 
         return train_labeled_dataset, train_unlabeled_dataset, test_dataset, labeled_ind, unlabeled_ind
