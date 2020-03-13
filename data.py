@@ -5,17 +5,41 @@ from torchvision.datasets import CIFAR10
 import numpy as np
 from torch.utils.data import SubsetRandomSampler
 
-from PIL import ImageFilter
 from PIL import Image
 import torch
+
+
+def cutout(image, p):
+
+    image = np.asarray(image).copy()
+
+    draw = np.random.rand()
+    if draw > p:
+        return image
+
+    h, w = image.shape[:2]
+
+    draw = np.random.uniform(0, 0.5, 1)
+    if draw == 0:
+        return image
+    else:
+        patch_size = int(draw * h)
+
+    lu_x = np.random.randint(0, w - patch_size)
+    lu_y = np.random.randint(0, h - patch_size)
+
+    mask_color = np.asarray([0.5, 0.5, 0.5])
+
+    image[lu_y:lu_y + patch_size, lu_x:lu_x + patch_size] = mask_color
+
+    return image
 
 
 def cifar_strong_transforms():
     all_transforms = transforms.Compose([
         transforms.RandomResizedCrop(32),
         transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
-        transforms.RandomGrayscale(p=0.2),
+        transforms.Lambda(lambda x: cutout(x, p=1.0)),
         transforms.ToTensor(),
         transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
     ])
@@ -24,6 +48,7 @@ def cifar_strong_transforms():
 
 def cifar_weak_transforms():
     all_transforms = transforms.Compose([
+        transforms.RandomHorizontalFlip(p=0.5),
         transforms.ToTensor(),
         transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
     ])
