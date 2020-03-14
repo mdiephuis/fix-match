@@ -52,7 +52,7 @@ use_cuda = not args.no_cuda and torch.cuda.is_available()
 if use_cuda:
     dtype = torch.cuda.FloatTensor
     device = torch.device("cuda")
-    torch.cuda.set_device(0)
+    torch.cuda.set_device(1)
     print('GPU')
 else:
     dtype = torch.FloatTensor
@@ -141,25 +141,55 @@ def train(model, loader, optimizer, epoch, use_cuda):
 
         total_loss += loss.item()
 
-        tqdm_bar.set_description('Epoch: [{}] Loss: {:.4f}'.format(epoch, loss.item()))
+        tqdm_bar.set_description('Train: Epoch: [{}] Loss: {:.4f}'.format(epoch, loss.item()))
 
     return total_loss / (len(loader.train_labeled))
 
 
+def validation(model, loader, optimizer, epoch, use_cuda):
+
+    # TODO TWO LOSS FUNCTIONS
+    loss_func = nn.CrossEntropyLoss()
+
+    data_loader = loader.test
+
+    model.eval()
+
+    total_loss = 0.0
+
+    tqdm_bar = tqdm(data_loader, total=len(loader.test))
+    for batch_idx, (x, y) in enumerate(tqdm_bar):
+
+        x = x.cuda() if use_cuda else x
+
+        y = y.cuda() if use_cuda else y
+
+        # model forward supervised
+        y_hat = model(x)
+
+        loss = loss_func(y_hat, y)
+
+        total_loss += loss.item()
+
+        tqdm_bar.set_description('Validation: Epoch: [{}] Loss: {:.4f}'.format(epoch, loss.item()))
+
+    return total_loss / (len(loader.test))
+
+
 def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
     t_loss = train(model, loader, optimizer, epoch, use_cuda)
-    # v_loss = validate(model, loader, optimizer, False, epoch, use_cuda)
+    v_loss = validation(model, loader, optimizer, epoch, use_cuda)
 
-    schedular.step(t_loss)
+    schedular.step(v_loss)
 
     if use_tb:
         logger.add_scalar(log_dir + '/train-loss', t_loss, epoch)
-        # logger.add_scalar(log_dir + '/valid-loss', v_loss, epoch)
+        logger.add_scalar(log_dir + '/valid-loss', v_loss, epoch)
 
     # print('Epoch: {} Train loss {}'.format(epoch, t_loss))
     # print('Epoch: {} Valid loss {}'.format(epoch, v_loss))
 
-    return t_loss
+    return v_loss
 
 
 model = resnet50_cifar(args.feature_size).type(dtype)
