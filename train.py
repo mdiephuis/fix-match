@@ -9,11 +9,9 @@ from tqdm import tqdm
 import os
 import time
 
-
 from models import *
 from utils import *
 from data import *
-from loss import *
 
 parser = argparse.ArgumentParser(description='Fixmatch')
 
@@ -25,8 +23,8 @@ parser.add_argument('--data-dir', type=str, default='data',
                     help='Path to dataset (default: data')
 parser.add_argument('--feature-size', type=int, default=128,
                     help='Feature output size (default: 128')
-parser.add_argument('--num-labeled', type=int, default=100,
-                    help='labeled data per class (default: 100')
+parser.add_argument('--mu', type=int, default=2,
+                    help='Fraction of unlabeled data (default: 2')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input training batch-size')
 parser.add_argument('--accumulation-steps', type=int, default=4, metavar='N',
@@ -35,6 +33,10 @@ parser.add_argument('--epochs', type=int, default=150, metavar='N',
                     help='number of training epochs (default: 150)')
 parser.add_argument('--lr', type=float, default=1e-3,
                     help='learning rate (default: 1e-3')
+parser.add_argument('--decay-vlr', type=float, default=1e-3,
+                    help='learning rate (default: 1e-3')
+parser.add_argument('--gamma', type=float, default=1.0,
+                    help='gamma loss balance (default: 1.0')
 parser.add_argument('--log-dir', type=str, default='runs',
                     help='logging directory (default: runs)')
 parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -71,27 +73,25 @@ if not os.path.exists('runs'):
 if use_tb:
     logger = SummaryWriter(comment='_' + args.uid + '_' + args.dataset_name)
 
-
-loader = LoaderCIFAR(args.data_dir, True, args.batch_size, args.num_labeled, use_cuda)
+# data
+loader = LoaderCIFAR(args.data_dir, True, args.batch_size, args.mu, use_cuda)
 
 
 # train validate
 def train(model, loader, optimizer, epoch, use_cuda):
 
     # TODO TWO LOSS FUNCTIONS
-    loss_func = None
+    loss_func = nn.CrossEntropyLoss()
 
     data_loader = zip(loader.train_labeled, loader.train_unlabeled)
 
     model.train()
-    model.zero_grad()
-
-    desc = 'Train'
 
     total_loss = 0.0
+    n_class = 10
 
     tqdm_bar = tqdm(data_loader)
-    for batch_idx, (data_s, data_u) in enumerate(data_loader):
+    for batch_idx, (data_s, data_u) in enumerate(tqdm_bar):
 
         # labeled data
         x_i_s, y_s = data_s
@@ -106,21 +106,43 @@ def train(model, loader, optimizer, epoch, use_cuda):
 
         y_s = y_s.cuda() if use_cuda else y_s
 
-        # model forward
+        # model forward supervised
+        y_s_hat = model(x_i_s)
 
-        # loss function
-        loss = loss_func(z_i, z_j)
-        loss /= args.accumulation_steps
+        # model forward non supervised, weak data
+        y_i_u_hat = model(x_i_u).detach()
 
+        # supervised loss
+        loss_supervised = loss_func(y_s_hat, y_s)
+
+        # Check confidence in prediction. If above threshold, use the strongly augmented pair
+        with torch.no_grad():
+            predictions = torch.softmax(y_i_u_hat, dim=1)
+            score, labels = torch.max(predictions, dim=1)
+            valid = score > 0.90
+
+        if sum(valid) > 0:
+            # Create pseudo labels for valid entries and select the matching correct strongly
+            # augmented images
+            y_pseudo = labels[valid]
+            x_j_u = x_j_u[valid]
+
+            # model forward for pseudo labeled strong augmented pairs
+            y_j_hat = model(x_j_u)
+
+            loss_unsupervised = loss_func(y_j_hat, y_pseudo)
+        else:
+            loss_unsupervised = 0
+
+        loss = loss_supervised + (args.gamma * loss_unsupervised)
+
+        model.zero_grad()
         loss.backward()
-
-        if (i + 1) % args.accumulation_steps == 0:
-            optimizer.step()
-            model.zero_grad()
+        optimizer.step()
 
         total_loss += loss.item()
 
-        tqdm_bar.set_description('{} Epoch: [{}] Loss: {:.4f}'.format(desc, epoch, loss.item()))
+        tqdm_bar.set_description('Epoch: [{}] Loss: {:.4f}'.format(epoch, loss.item()))
 
     return total_loss / (len(data_loader.dataset))
 
@@ -129,7 +151,7 @@ def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
     t_loss = train(model, loader, optimizer, epoch, use_cuda)
     # v_loss = validate(model, loader, optimizer, False, epoch, use_cuda)
 
-    schedular.step(v_loss)
+    schedular.step(t_loss)
 
     if use_tb:
         logger.add_scalar(log_dir + '/train-loss', t_loss, epoch)
@@ -138,7 +160,7 @@ def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
     # print('Epoch: {} Train loss {}'.format(epoch, t_loss))
     # print('Epoch: {} Valid loss {}'.format(epoch, v_loss))
 
-    return v_loss
+    return t_loss
 
 
 model = resnet50_cifar(args.feature_size).type(dtype)
@@ -146,7 +168,7 @@ model = resnet50_cifar(args.feature_size).type(dtype)
 
 # TODO: Set settings for CosineAnnealingLR
 optimizer = optim.SGD(model.parameters(), lr=args.lr)
-schedular = CosineAnnealingLR(optimizer, gamma=args.decay_lr)
+schedular = CosineAnnealingLR(optimizer, 100)
 
 
 # Main training loop

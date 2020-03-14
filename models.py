@@ -72,14 +72,8 @@ class ResNet_CIFAR(nn.Module):
             self._make_layer(block, 512, layers[2], stride=2)
         )
 
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.linear = nn.Linear(512 * block.expansion, num_features)
-
-        self.learning_head = nn.Sequential(
-            nn.Linear(512 * block.expansion, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Linear(512, num_features)
-        )
 
     def _make_layer(self, block, planes, num_blocks, stride=1):
         strides = [stride] + [1] * (num_blocks - 1)
@@ -95,15 +89,11 @@ class ResNet_CIFAR(nn.Module):
 
         x = self.layer_block(x)
 
-        x = F.avg_pool2d(x, 4)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.linear(x)
 
-        # Feature representation, 2048
-        h_out = x.view(x.size(0), -1)
-
-        # Learning output
-        z_out = self.learning_head(h_out)
-
-        return F.normalize(h_out, dim=-1), F.normalize(z_out, dim=-1)
+        return x
 
 
 def resnet50_cifar(num_features=128):
