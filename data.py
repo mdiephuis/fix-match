@@ -1,66 +1,9 @@
-from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
+from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR10
-
-import numpy as np
-from torch.utils.data import SubsetRandomSampler
-
+from torch.utils.data import RandomSampler, BatchSampler
 from PIL import Image
-import torch
 
-
-def cutout(image, p):
-
-    image = np.asarray(image).copy()
-
-    draw = np.random.rand()
-    if draw > p:
-        return image
-
-    h, w = image.shape[:2]
-
-    draw = np.random.uniform(0, 0.5, 1)
-    if draw == 0:
-        return image
-    else:
-        patch_size = int(draw * h)
-
-    lu_x = np.random.randint(0, w - patch_size)
-    lu_y = np.random.randint(0, h - patch_size)
-
-    mask_color = np.asarray([0.5, 0.5, 0.5])
-
-    image[lu_y:lu_y + patch_size, lu_x:lu_x + patch_size] = mask_color
-
-    return image
-
-
-def cifar_strong_transforms():
-    all_transforms = transforms.Compose([
-        transforms.RandomResizedCrop(32),
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.Lambda(lambda x: cutout(x, p=1.0)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
-    ])
-    return all_transforms
-
-
-def cifar_weak_transforms():
-    all_transforms = transforms.Compose([
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.ToTensor(),
-        transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
-    ])
-    return all_transforms
-
-
-def cifar_test_transforms():
-    all_transforms = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
-    ])
-    return all_transforms
+from augmentation import cifar_strong_transforms, cifar_weak_transforms, cifar_test_transforms
 
 
 class CIFAR10C(CIFAR10):
@@ -86,15 +29,25 @@ class CIFAR10C(CIFAR10):
 
 
 class LoaderCIFAR(object):
-    def __init__(self, file_path, download, batch_size, num_labeled, use_cuda):
+    def __init__(self, file_path, download, batch_size, mu, use_cuda):
 
         kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
+        self.mu = mu
 
         # Get the datasets
-        train_labeled_dataset, train_unlabeled_dataset, test_dataset, labeled_ind, unlabeled_ind = self.get_dataset(file_path, download, num_labeled)
+        train_labeled_dataset, train_unlabeled_dataset, test_dataset = self.get_dataset(file_path, download)
+
+        # Set the samplers
+        num_samples = len(train_labeled_dataset)
+        sampler_labeled = RandomSampler(train_labeled_dataset, replacement=True, num_samples=num_samples)
+        sampler_unlabeled = RandomSampler(train_unlabeled_dataset, replacement=True, num_samples=self.mu * num_samples)
+
+        batch_sampler_labeled = BatchSampler(sampler_labeled, batch_size=batch_size, drop_last=False)
+        batch_sampler_unlabeled = BatchSampler(sampler_unlabeled, batch_size=self.mu * batch_size, drop_last=False)
+
         # Set the loaders
-        self.train_labeled = DataLoader(train_labeled_dataset, batch_size=batch_size, shuffle=False, sampler=SubsetRandomSampler(labeled_ind), **kwargs)
-        self.train_unlabeled = DataLoader(train_unlabeled_dataset, batch_size=batch_size, shuffle=False, sampler=SubsetRandomSampler(unlabeled_ind), **kwargs)
+        self.train_labeled = DataLoader(train_labeled_dataset, batch_sampler=batch_sampler_labeled, **kwargs)
+        self.train_unlabeled = DataLoader(train_unlabeled_dataset, batch_sampler=batch_sampler_unlabeled, **kwargs)
 
         self.test = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, **kwargs)
 
@@ -102,9 +55,7 @@ class LoaderCIFAR(object):
         self.img_shape = list(tmp_batch.size())[1:]
 
     @staticmethod
-    def get_dataset(file_path, download, num_labeled):
-
-        num_labeled = 10
+    def get_dataset(file_path, download):
 
         # transforms
         weak_transform = cifar_weak_transforms()
@@ -124,16 +75,4 @@ class LoaderCIFAR(object):
                                transform=test_transform,
                                target_transform=None)
 
-        if isinstance(train_labeled_dataset.targets, torch.Tensor):
-            train_labels = train_labeled_dataset.targets.numpy()
-        else:
-            train_labels = np.array(train_labeled_dataset.targets)
-
-        labeled_ind, unlabeled_ind = [], []
-
-        for cl in range(10):
-            class_indices = np.random.permutation(np.where(train_labels == cl)[0]).tolist()
-            labeled_ind.extend(class_indices[:num_labeled])
-            unlabeled_ind.extend(class_indices[num_labeled:])
-
-        return train_labeled_dataset, train_unlabeled_dataset, test_dataset, labeled_ind, unlabeled_ind
+        return train_labeled_dataset, train_unlabeled_dataset, test_dataset
