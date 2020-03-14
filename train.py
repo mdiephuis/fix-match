@@ -52,7 +52,7 @@ use_cuda = not args.no_cuda and torch.cuda.is_available()
 if use_cuda:
     dtype = torch.cuda.FloatTensor
     device = torch.device("cuda")
-    torch.cuda.set_device(1)
+    torch.cuda.set_device(4)
     print('GPU')
 else:
     dtype = torch.FloatTensor
@@ -156,6 +156,7 @@ def validation(model, loader, optimizer, epoch, use_cuda):
     model.eval()
 
     total_loss = 0.0
+    total_acc = 0.0
 
     tqdm_bar = tqdm(data_loader, total=len(loader.test))
     for batch_idx, (x, y) in enumerate(tqdm_bar):
@@ -171,20 +172,29 @@ def validation(model, loader, optimizer, epoch, use_cuda):
 
         total_loss += loss.item()
 
-        tqdm_bar.set_description('Validation: Epoch: [{}] Loss: {:.4f}'.format(epoch, loss.item()))
+        # accuracy
+        pred = y_hat.max(dim=1)[1]
+        correct = pred.eq(y).sum().item()
+        correct /= y.size(0)
+        batch_acc = (correct * 100)
+        total_acc += batch_acc
 
-    return total_loss / (len(loader.test))
+        tqdm_bar.set_description('Validation: Epoch: [{}] Loss: {:.4f} Acc: {:.4f}'.format(epoch, loss.item(), batch_acc))
+
+    return total_loss / (len(loader.test)), total_acc / (len(loader.test))
 
 
 def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
     t_loss = train(model, loader, optimizer, epoch, use_cuda)
-    v_loss = validation(model, loader, optimizer, epoch, use_cuda)
+    v_loss, v_acc = validation(model, loader, optimizer, epoch, use_cuda)
 
     schedular.step(v_loss)
 
     if use_tb:
         logger.add_scalar(log_dir + '/train-loss', t_loss, epoch)
         logger.add_scalar(log_dir + '/valid-loss', v_loss, epoch)
+
+        logger.add_scalar(log_dir + '/valid-acc', v_acc, epoch)
 
     # print('Epoch: {} Train loss {}'.format(epoch, t_loss))
     # print('Epoch: {} Valid loss {}'.format(epoch, v_loss))
