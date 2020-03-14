@@ -91,7 +91,7 @@ def smooth(image):
     return image
 
 
-def get_strong_transforms():
+def cifar_strong_transforms():
     transform_list = [
         transforms.Lambda(lambda x: auto_contrast(x)),
         transforms.Lambda(lambda x: brightness(x)),
@@ -113,17 +113,30 @@ def get_strong_transforms():
 
     transform_compose = transforms.Compose([
         transforms.RandomChoice(transform_list),
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
     ])
 
     return transform_compose
 
 
-def get_weak_transforms():
+def cifar_weak_transforms():
     transform_compose = transforms.Compose([
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.5),
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
+    ])
+
+    return transform_compose
+
+
+def cifar_test_transforms():
+    transform_compose = transforms.Compose([
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomVerticalFlip(p=0.5),
+        transforms.ToTensor(),
+        transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
     ])
 
     return transform_compose
