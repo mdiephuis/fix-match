@@ -143,7 +143,7 @@ def train(model, loader, optimizer, epoch, use_cuda):
 
         tqdm_bar.set_description('Epoch: [{}] Loss: {:.4f}'.format(epoch, loss.item()))
 
-    return total_loss / (len(loader.train_labeled.dataset))
+    return total_loss / (len(loader.train_labeled))
 
 
 def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
