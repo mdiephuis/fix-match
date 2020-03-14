@@ -89,7 +89,7 @@ def train(model, loader, optimizer, epoch, use_cuda):
 
     total_loss = 0.0
 
-    tqdm_bar = tqdm(data_loader, total=len(loader.train_labeled.dataset))
+    tqdm_bar = tqdm(data_loader, total=len(loader.train_labeled))
     for batch_idx, (data_s, data_u) in enumerate(tqdm_bar):
 
         # labeled data
