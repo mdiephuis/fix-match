@@ -88,9 +88,8 @@ def train(model, loader, optimizer, epoch, use_cuda):
     model.train()
 
     total_loss = 0.0
-    n_class = 10
 
-    tqdm_bar = tqdm(data_loader)
+    tqdm_bar = tqdm(data_loader, total=len(loader.train_labeled.dataset))
     for batch_idx, (data_s, data_u) in enumerate(tqdm_bar):
 
         # labeled data
@@ -144,7 +143,7 @@ def train(model, loader, optimizer, epoch, use_cuda):
 
         tqdm_bar.set_description('Epoch: [{}] Loss: {:.4f}'.format(epoch, loss.item()))
 
-    return total_loss / (len(data_loader.dataset))
+    return total_loss / (len(loader.train_labeled.dataset))
 
 
 def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
