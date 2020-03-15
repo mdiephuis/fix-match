@@ -46,6 +46,13 @@ parser.add_argument('--load-model', type=str, default=None,
 
 args = parser.parse_args()
 
+# Notes:
+# - SGD with momentum of 0.9 works the best. lr : 0.03
+# - the Nesterov variant of momentum [42] is not required for achieving an error below 5%
+# - use a cosine lr decay
+# - for the cosine learning rate decay, picking a proper decaying rate is important. Finally, using no decay results in worse accuracy
+# - We find that tuning the weight decay is exceptionally important : CIFAR10 -> 0.0005
+
 # Set cuda
 use_cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -249,4 +256,4 @@ for epoch in range(args.epochs):
 # TensorboardX logger
 logger.close()
 
-# save model / restart training
+# save model / restart trainin
