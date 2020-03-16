@@ -1,7 +1,7 @@
 import argparse
 import torch
 import torch.optim as optim
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmRestarts
 import numpy as np
 
 from tensorboardX import SummaryWriter
@@ -31,9 +31,9 @@ parser.add_argument('--accumulation-steps', type=int, default=4, metavar='N',
                     help='Gradient accumulation steps (default: 4')
 parser.add_argument('--epochs', type=int, default=150, metavar='N',
                     help='number of training epochs (default: 150)')
-parser.add_argument('--lr', type=float, default=1e-3,
-                    help='learning rate (default: 1e-3')
-parser.add_argument('--decay-vlr', type=float, default=1e-3,
+parser.add_argument('--lr', type=float, default=0.03,
+                    help='learning rate (default: 0.03')
+parser.add_argument('--decay-lr', type=float, default=1e-3,
                     help='learning rate (default: 1e-3')
 parser.add_argument('--gamma', type=float, default=1.0,
                     help='gamma loss balance (default: 1.0')
@@ -59,7 +59,7 @@ use_cuda = not args.no_cuda and torch.cuda.is_available()
 if use_cuda:
     dtype = torch.cuda.FloatTensor
     device = torch.device("cuda")
-    torch.cuda.set_device(4)
+    torch.cuda.set_device(0)
     print('GPU')
 else:
     dtype = torch.FloatTensor
@@ -85,7 +85,7 @@ loader = LoaderCIFAR(args.data_dir, True, args.batch_size, args.mu, use_cuda)
 
 
 # train validate
-def train(model, loader, optimizer, epoch, use_cuda):
+def train(model, loader, optimizer, schedular, epoch, use_cuda):
 
     # TODO TWO LOSS FUNCTIONS
     loss_func = nn.CrossEntropyLoss()
@@ -142,6 +142,8 @@ def train(model, loader, optimizer, epoch, use_cuda):
 
         loss = loss_supervised + (args.gamma * loss_unsupervised)
 
+        schedular.step(7 * np.pi * (epoch + batch_idx) / (16 * len(loader.train_labeled)))
+
         model.zero_grad()
         loss.backward()
         optimizer.step()
@@ -155,7 +157,6 @@ def train(model, loader, optimizer, epoch, use_cuda):
 
 def validation(model, loader, optimizer, epoch, use_cuda):
 
-    # TODO TWO LOSS FUNCTIONS
     loss_func = nn.CrossEntropyLoss()
 
     data_loader = loader.test
@@ -192,10 +193,9 @@ def validation(model, loader, optimizer, epoch, use_cuda):
 
 
 def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
-    t_loss = train(model, loader, optimizer, epoch, use_cuda)
-    v_loss, v_acc = validation(model, loader, optimizer, epoch, use_cuda)
 
-    schedular.step(v_loss)
+    t_loss = train(model, loader, optimizer, schedular, epoch, use_cuda)
+    v_loss, v_acc = validation(model, loader, optimizer, epoch, use_cuda)
 
     if use_tb:
         logger.add_scalar(log_dir + '/train-loss', t_loss, epoch)
@@ -212,9 +212,8 @@ def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
 model = resnet50_cifar(args.feature_size).type(dtype)
 
 
-# TODO: Set settings for CosineAnnealingLR
-optimizer = optim.SGD(model.parameters(), lr=args.lr)
-schedular = CosineAnnealingLR(optimizer, 100)
+optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+schedular = CosineAnnealingWarmRestarts(optimizer=optimizer, T_0=len(loader.train_labeled))
 
 
 # Main training loop
