@@ -59,7 +59,7 @@ use_cuda = not args.no_cuda and torch.cuda.is_available()
 if use_cuda:
     dtype = torch.cuda.FloatTensor
     device = torch.device("cuda")
-    torch.cuda.set_device(0)
+    torch.cuda.set_device(1)
     print('GPU')
 else:
     dtype = torch.FloatTensor
@@ -210,7 +210,7 @@ def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
 
 
 model = resnet50_cifar(args.feature_size).type(dtype)
-
+init_weights(model)
 
 optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
 schedular = CosineAnnealingWarmRestarts(optimizer=optimizer, T_0=len(loader.train_labeled))
