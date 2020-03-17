@@ -27,8 +27,6 @@ parser.add_argument('--mu', type=int, default=2,
                     help='Fraction of unlabeled data (default: 2')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input training batch-size')
-parser.add_argument('--accumulation-steps', type=int, default=4, metavar='N',
-                    help='Gradient accumulation steps (default: 4')
 parser.add_argument('--epochs', type=int, default=150, metavar='N',
                     help='number of training epochs (default: 150)')
 parser.add_argument('--lr', type=float, default=0.03,
@@ -212,7 +210,7 @@ def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
 model = resnet50_cifar(args.feature_size).type(dtype)
 init_weights(model)
 
-optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.0005)
 schedular = CosineAnnealingWarmRestarts(optimizer=optimizer, T_0=len(loader.train_labeled))
 
 
