@@ -1,7 +1,7 @@
 import argparse
 import torch
 import torch.optim as optim
-from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmRestarts
+from torch.optim.lr_scheduler import LambdaLR
 import numpy as np
 
 from tensorboardX import SummaryWriter
@@ -27,8 +27,6 @@ parser.add_argument('--mu', type=int, default=2,
                     help='Fraction of unlabeled data (default: 2')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input training batch-size')
-parser.add_argument('--accumulation-steps', type=int, default=4, metavar='N',
-                    help='Gradient accumulation steps (default: 4')
 parser.add_argument('--epochs', type=int, default=150, metavar='N',
                     help='number of training epochs (default: 150)')
 parser.add_argument('--lr', type=float, default=0.03,
@@ -85,11 +83,8 @@ loader = LoaderCIFAR(args.data_dir, True, args.batch_size, args.mu, use_cuda)
 
 
 # train validate
-def train(model, loader, optimizer, epoch, use_cuda):
+def train(model, loader, optimizer, scheduler, epoch, use_cuda):
 
-    lr = optimizer.param_groups[0]['lr']
-
-    # TODO TWO LOSS FUNCTIONS
     loss_func = nn.CrossEntropyLoss()
 
     data_loader = zip(loader.train_labeled, loader.train_unlabeled)
@@ -144,11 +139,10 @@ def train(model, loader, optimizer, epoch, use_cuda):
 
         loss = loss_supervised + (args.gamma * loss_unsupervised)
 
-        # update the learning rate
-        step = np.clip(batch_idx / len(loader.train_labeled), 0, 1)
+        # update the learning rate via the Lambda scheduler
+        #
 
-        lr = lr * np.cos(step * (7 * np.pi) / 16)
-        optimizer.param_groups[0]['lr'] = lr
+
 
         model.zero_grad()
         loss.backward()
@@ -198,9 +192,9 @@ def validation(model, loader, optimizer, epoch, use_cuda):
     return total_loss / (len(loader.test)), total_acc / (len(loader.test))
 
 
-def execute_graph(model, loader, optimizer, epoch, use_cuda):
+def execute_graph(model, loader, optimizer, scheduler, epoch, use_cuda):
 
-    t_loss, lr = train(model, loader, optimizer, epoch, use_cuda)
+    t_loss, lr = train(model, loader, optimizer, scheduler, epoch, use_cuda)
     v_loss, v_acc = validation(model, loader, optimizer, epoch, use_cuda)
 
     if use_tb:
@@ -219,7 +213,9 @@ def execute_graph(model, loader, optimizer, epoch, use_cuda):
 model = resnet50_cifar(args.feature_size).type(dtype)
 init_weights(model)
 
-optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.0005)
+# todo: function call here
+scheduler = LambdaLR(optimizer, )
 
 
 # Main training loop
@@ -231,6 +227,7 @@ if args.load_model is not None:
         checkpoint = torch.load(args.load_model)
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
+        scheduler.load_state_dict(checkpoint['scheduler'])
         best_loss = checkpoint['val_loss']
         epoch = checkpoint['epoch']
         print('Loading model: {}. Resuming from epoch: {}'.format(args.load_model, epoch))
@@ -238,7 +235,7 @@ if args.load_model is not None:
         print('Model: {} not found'.format(args.load_model))
 
 for epoch in range(args.epochs):
-    v_loss = execute_graph(model, loader, optimizer, epoch, use_cuda)
+    v_loss = execute_graph(model, loader, optimizer, scheduler, epoch, use_cuda)
 
     if v_loss < best_loss:
         best_loss = v_loss
@@ -247,6 +244,7 @@ for epoch in range(args.epochs):
             'epoch': epoch,
             'model': model.state_dict(),
             'optimizer': optimizer.state_dict(),
+            'scheduler': scheduler.state_dict(),
             'val_loss': v_loss
         }
         t = time.localtime()

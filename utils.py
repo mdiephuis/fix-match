@@ -1,5 +1,7 @@
+import numpy as np
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import LambdaLR
 
 
 def type_tdouble(use_cuda=False):
@@ -22,3 +24,15 @@ def init_weights(module):
         elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
             nn.init.constant_(m.weight, 1)
             nn.init.constant_(m.bias, 0)
+
+
+def cosine_warmup_scheduler(optimizer, num_warmup_steps, num_train_steps):
+
+    def _cosine_warmup_scheduler(curr_step):
+        if curr_step < num_warmup_steps:
+            return float(curr_step) / float(max(1, num_warmup_steps))
+        else:
+            value = np.cos(7 * np.pi / 16. * (curr_step - num_warmup_steps) / (num_train_steps - num_warmup_steps))
+            return max(0, value)
+
+    return LambdaLR(optimizer, _cosine_warmup_scheduler, last_epoch=-1)
