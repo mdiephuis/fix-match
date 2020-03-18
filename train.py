@@ -81,7 +81,7 @@ loader = LoaderCIFAR(args.data_dir, True, args.batch_size, args.mu, use_cuda)
 
 
 # train validate
-def train(model, loader, optimizer, schedular, epoch, use_cuda):
+def train(model, loader, optimizer, scheduler, epoch, use_cuda):
 
     # TODO TWO LOSS FUNCTIONS
     loss_func = nn.CrossEntropyLoss()
@@ -138,7 +138,7 @@ def train(model, loader, optimizer, schedular, epoch, use_cuda):
 
         loss = loss_supervised + (args.gamma * loss_unsupervised)
 
-        schedular.step(7 * np.pi * (batch_idx) / (16 * len(loader.train_labeled)))
+        scheduler.step(7 * np.pi * (batch_idx) / (16 * len(loader.train_labeled)))
 
         model.zero_grad()
         loss.backward()
@@ -188,9 +188,9 @@ def validation(model, loader, optimizer, epoch, use_cuda):
     return total_loss / (len(loader.test)), total_acc / (len(loader.test))
 
 
-def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
+def execute_graph(model, loader, optimizer, scheduler, epoch, use_cuda):
 
-    t_loss = train(model, loader, optimizer, schedular, epoch, use_cuda)
+    t_loss = train(model, loader, optimizer, scheduler, epoch, use_cuda)
     v_loss, v_acc = validation(model, loader, optimizer, epoch, use_cuda)
 
     if use_tb:
@@ -209,7 +209,7 @@ model = resnet50_cifar().type(dtype)
 init_weights(model)
 
 optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.0005)
-schedular = CosineAnnealingWarmRestarts(optimizer=optimizer, T_0=len(loader.train_labeled))
+scheduler = CosineAnnealingWarmRestarts(optimizer=optimizer, T_0=len(loader.train_labeled))
 
 
 # Main training loop
@@ -221,7 +221,7 @@ if args.load_model is not None:
         checkpoint = torch.load(args.load_model)
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
-        schedular.load_state_dict(checkpoint['schedular'])
+        scheduler.load_state_dict(checkpoint['scheduler'])
         best_loss = checkpoint['val_loss']
         epoch = checkpoint['epoch']
         print('Loading model: {}. Resuming from epoch: {}'.format(args.load_model, epoch))
@@ -229,7 +229,7 @@ if args.load_model is not None:
         print('Model: {} not found'.format(args.load_model))
 
 for epoch in range(args.epochs):
-    v_loss = execute_graph(model, loader, optimizer, schedular, epoch, use_cuda)
+    v_loss = execute_graph(model, loader, optimizer, scheduler, epoch, use_cuda)
 
     if v_loss < best_loss:
         best_loss = v_loss
@@ -238,7 +238,7 @@ for epoch in range(args.epochs):
             'epoch': epoch,
             'model': model.state_dict(),
             'optimizer': optimizer.state_dict(),
-            'schedular': schedular.state_dict(),
+            'scheduler': scheduler.state_dict(),
             'val_loss': v_loss
         }
         t = time.localtime()
