@@ -23,7 +23,7 @@ parser.add_argument('--data-dir', type=str, default='data',
                     help='Path to dataset (default: data')
 parser.add_argument('--feature-size', type=int, default=128,
                     help='Feature output size (default: 128')
-parser.add_argument('--mu', type=int, default=2,
+parser.add_argument('--mu', type=int, default=7,
                     help='Fraction of unlabeled data (default: 2')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input training batch-size')
@@ -123,7 +123,7 @@ def train(model, loader, optimizer, schedular, epoch, use_cuda):
         with torch.no_grad():
             predictions = torch.softmax(y_i_u_hat, dim=1)
             score, labels = torch.max(predictions, dim=1)
-            valid = score > 0.90
+            valid = score > 0.95
 
         if sum(valid) > 0:
             # Create pseudo labels for valid entries and select the matching correct strongly
@@ -140,7 +140,7 @@ def train(model, loader, optimizer, schedular, epoch, use_cuda):
 
         loss = loss_supervised + (args.gamma * loss_unsupervised)
 
-        schedular.step(7 * np.pi * (epoch + batch_idx) / (16 * len(loader.train_labeled)))
+        schedular.step(7 * np.pi * (batch_idx) / (16 * len(loader.train_labeled)))
 
         model.zero_grad()
         loss.backward()
