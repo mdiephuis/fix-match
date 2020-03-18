@@ -59,7 +59,7 @@ class BasicBlock_CIFAR(nn.Module):
 
 class ResNet_CIFAR(nn.Module):
 
-    def __init__(self, block, layers, num_features=128):
+    def __init__(self, block, layers, num_classes=10):
         super(ResNet_CIFAR, self).__init__()
         self.in_planes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
@@ -73,7 +73,7 @@ class ResNet_CIFAR(nn.Module):
         )
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.linear = nn.Linear(512 * block.expansion, num_features)
+        self.linear = nn.Linear(512 * block.expansion, num_classes)
 
     def _make_layer(self, block, planes, num_blocks, stride=1):
         strides = [stride] + [1] * (num_blocks - 1)
@@ -96,9 +96,9 @@ class ResNet_CIFAR(nn.Module):
         return x
 
 
-def resnet50_cifar(num_features=128):
-    return ResNet_CIFAR(Bottleneck_CIFAR, [3, 4, 6, 3], num_features)
+def resnet50_cifar(num_classes=10):
+    return ResNet_CIFAR(Bottleneck_CIFAR, [3, 4, 6, 3], num_classes)
 
 
-def resnet18_cifar(num_features=128):
-    return ResNet_CIFAR(BasicBlock_CIFAR, [2, 2, 2, 2], num_features)
+def resnet18_cifar(num_classes=10):
+    return ResNet_CIFAR(BasicBlock_CIFAR, [2, 2, 2, 2], num_classes)
