@@ -21,8 +21,6 @@ parser.add_argument('--dataset-name', type=str, default='CIFAR10C',
                     help='Name of dataset (default: CIFAR10C')
 parser.add_argument('--data-dir', type=str, default='data',
                     help='Path to dataset (default: data')
-parser.add_argument('--feature-size', type=int, default=128,
-                    help='Feature output size (default: 128')
 parser.add_argument('--mu', type=int, default=7,
                     help='Fraction of unlabeled data (default: 2')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
@@ -207,7 +205,7 @@ def execute_graph(model, loader, optimizer, schedular, epoch, use_cuda):
     return v_loss
 
 
-model = resnet50_cifar(args.feature_size).type(dtype)
+model = resnet50_cifar().type(dtype)
 init_weights(model)
 
 optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.0005)
