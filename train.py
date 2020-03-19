@@ -144,6 +144,10 @@ def train(model, loader, optimizer, scheduler, epoch, use_cuda):
         loss.backward()
         optimizer.step()
 
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                param.data = ema(name, param.data)
+
         total_loss += loss.item()
 
         tqdm_bar.set_description('Train: Epoch: [{}] Loss: {:.4f}'.format(epoch, loss.item()))
@@ -211,6 +215,11 @@ init_weights(model)
 optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.0005)
 scheduler = CosineAnnealingWarmRestarts(optimizer=optimizer, T_0=len(loader.train_labeled))
 
+# EMA
+ema = EMA(0.999)
+for name, param in model.named_parameters():
+    if param.requires_grad:
+        ema.register(name, param.data)
 
 # Main training loop
 best_loss = np.inf
