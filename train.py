@@ -39,6 +39,8 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables cuda (default: False')
 parser.add_argument('--load-model', type=str, default=None,
                     help='Load model to resume training for (default None)')
+parser.add_argument('--device-id', type=int, default=1,
+                    help='GPU device id (default: 1')
 
 args = parser.parse_args()
 
@@ -55,7 +57,7 @@ use_cuda = not args.no_cuda and torch.cuda.is_available()
 if use_cuda:
     dtype = torch.cuda.FloatTensor
     device = torch.device("cuda")
-    torch.cuda.set_device(1)
+    torch.cuda.set_device(args.device_id)
     print('GPU')
 else:
     dtype = torch.FloatTensor
