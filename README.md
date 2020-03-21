@@ -10,6 +10,8 @@ In progress pytorch implementation of [FixMatch: Simplifying Semi-Supervised Lea
 ## Results
 CIFAR10 classification accuracy for now. Approx 85% after 90 epochs
 
-<p align="center">
-    <img src="assets/runs_valid-acc.svg" width="315"\>
-</p>
+| Epochs| 100 | 500 
+| ------ |-----| -----|
+| Paper | xx | xx
+| This repo | 85.0 | 93.7500
+
