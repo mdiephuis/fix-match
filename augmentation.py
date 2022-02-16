@@ -36,14 +36,14 @@ def auto_contrast(image):
 def brightness(image):
     enhancer = PIL.ImageEnhance.Brightness(image)
     factor = np.random.random()
-    enhancer.enhance(factor)
+    image = enhancer.enhance(factor)
     return image
 
 
 def contrast(image):
     enhancer = PIL.ImageEnhance.Contrast(image)
     factor = np.random.random()
-    enhancer.enhance(factor)
+    image = enhancer.enhance(factor)
     return image
 
 
